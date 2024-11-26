@@ -2,8 +2,9 @@
 from matplotlib import pyplot as plt
 import numpy as np
 import torch
-from PPO.PPO_agent import PPOAgent
-from run import IbuprofenEnv
+from custom_PPO.PPO_agent import PPOAgent
+from custom_PPO.full_run import IbuprofenEnv
+
 
 def evaluate_agent(agent, env, episodes=1000):
     """
@@ -45,7 +46,6 @@ def evaluate_agent(agent, env, episodes=1000):
     plt.show()
 
 if __name__ == "__main__":
-
     # Initialize environment and agent
     env = IbuprofenEnv()
     state_dim = env.observation_space.shape[0]
