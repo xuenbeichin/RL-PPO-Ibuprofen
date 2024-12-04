@@ -1,81 +1,100 @@
 import torch.nn as nn
 
+
 class PolicyNetwork(nn.Module):
     """
-    Neural network representing the policy in PPO.
+    A neural network for the policy in reinforcement learning.
 
-    The policy outputs a probability distribution over actions given the state.
+    This network outputs a probability distribution over actions based on the current state,
+    using a multi-layer feedforward architecture with ReLU activations and a final softmax layer.
 
     Attributes:
-        fc (nn.Sequential): A sequential neural network with:
-            - An input layer that maps the state to a 64-dimensional space.
-            - A ReLU activation.
-            - A second layer that maps the 64-dimensional space to action probabilities.
-            - A softmax activation to produce a probability distribution.
+        fc (nn.Sequential): The sequential feedforward layers of the network.
     """
-    def __init__(self, state_dim, action_dim):
+
+    def __init__(self, state_dim, action_dim, hidden_units, num_layers):
         """
         Initializes the PolicyNetwork.
 
         Args:
-            state_dim (int): The dimension of the input state space.
-            action_dim (int): The number of possible actions in the action space.
+            state_dim (int): Dimension of the input state.
+            action_dim (int): Dimension of the action space (number of possible actions).
+            hidden_units (int): Number of units in each hidden layer.
+            num_layers (int): Number of layers in the network (excluding input and output layers).
         """
         super(PolicyNetwork, self).__init__()
-        self.fc = nn.Sequential(
-            nn.Linear(state_dim, 64),  # Input layer: maps state to 64 dimensions.
-            nn.ReLU(),                # Activation layer.
-            nn.Linear(64, action_dim),  # Output layer: maps 64 dimensions to action probabilities.
-            nn.Softmax(dim=-1)        # Softmax to produce a probability distribution.
-        )
+
+        # Create the layers for the policy network
+        # First layer maps state_dim to hidden_units
+        layers = [nn.Linear(state_dim, hidden_units), nn.ReLU()]
+
+        # Add additional hidden layers as specified by num_layers
+        for _ in range(num_layers - 1):
+            layers += [nn.Linear(hidden_units, hidden_units), nn.ReLU()]
+
+        # Final layer maps to action_dim and applies softmax for probability output
+        layers += [nn.Linear(hidden_units, action_dim), nn.Softmax(dim=-1)]
+
+        # Combine all layers into a sequential model
+        self.fc = nn.Sequential(*layers)
 
     def forward(self, state):
         """
-        Forward pass through the network.
+        Forward pass through the policy network.
 
         Args:
-            state (torch.Tensor): Input state tensor.
+            state (torch.Tensor): The input state tensor.
 
         Returns:
-            torch.Tensor: Probability distribution over actions.
+            torch.Tensor: A tensor representing the action probabilities.
         """
         return self.fc(state)
 
 
 class ValueNetwork(nn.Module):
     """
-    Neural network representing the value function in PPO.
+    A neural network for estimating the state value in reinforcement learning.
 
-    The value network estimates the expected cumulative reward (value) for a given state.
+    This network predicts the expected return (value) of a given state, using a
+    multi-layer feedforward architecture with ReLU activations and a final linear layer.
 
     Attributes:
-        fc (nn.Sequential): A sequential neural network with:
-            - An input layer that maps the state to a 64-dimensional space.
-            - A ReLU activation.
-            - A second layer that maps the 64-dimensional space to a scalar value.
+        fc (nn.Sequential): The sequential feedforward layers of the network.
     """
-    def __init__(self, state_dim):
+
+    def __init__(self, state_dim, hidden_units, num_layers):
         """
         Initializes the ValueNetwork.
 
         Args:
-            state_dim (int): The dimension of the input state space.
+            state_dim (int): Dimension of the input state.
+            hidden_units (int): Number of units in each hidden layer.
+            num_layers (int): Number of layers in the network (excluding input and output layers).
         """
         super(ValueNetwork, self).__init__()
-        self.fc = nn.Sequential(
-            nn.Linear(state_dim, 64),  # Input layer: maps state to 64 dimensions.
-            nn.ReLU(),                # Activation layer.
-            nn.Linear(64, 1)          # Output layer: maps 64 dimensions to a single scalar (state value).
-        )
+
+        # Create the layers for the value network
+        # First layer maps state_dim to hidden_units
+        layers = [nn.Linear(state_dim, hidden_units), nn.ReLU()]
+
+        # Add additional hidden layers as specified by num_layers
+        for _ in range(num_layers - 1):
+            layers += [nn.Linear(hidden_units, hidden_units), nn.ReLU()]
+
+        # Final layer outputs a single scalar value
+        layers.append(nn.Linear(hidden_units, 1))
+
+        # Combine all layers into a sequential model
+        self.fc = nn.Sequential(*layers)
 
     def forward(self, state):
         """
-        Forward pass through the network.
+        Forward pass through the value network.
 
         Args:
-            state (torch.Tensor): Input state tensor.
+            state (torch.Tensor): The input state tensor.
 
         Returns:
-            torch.Tensor: The estimated value of the input state.
+            torch.Tensor: A tensor representing the estimated state value.
         """
         return self.fc(state)
