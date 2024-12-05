@@ -122,6 +122,8 @@ class PPOAgent:
                 self.optimizer_policy.step()
                 self.optimizer_policy.step()
 
+
+
 def optimize_ppo(trial):
     # Create the CartPole-v1 environment
     env = gym.make("CartPole-v1", render_mode="rgb_array")  # Set render_mode to rgb_array
@@ -194,7 +196,7 @@ def optimize_ppo(trial):
     return np.mean(reward_history)
 
 study = optuna.create_study(direction="maximize")
-study.optimize(optimize_ppo, n_trials=500)
+study.optimize(optimize_ppo, n_trials=100)
 
 # Print the Best Hyperparameters
 print("Best Hyperparameters:")
@@ -224,7 +226,7 @@ agent = PPOAgent(
 
 
 reward_history = []
-episodes = 100000
+episodes = 10000
 
 for episode in range(episodes):
     states, actions, rewards, dones, old_probs = [], [], [], [], []

@@ -119,6 +119,39 @@ class RewardLoggingCallback(BaseCallback):
             # Skip if the metrics are not available
             pass
 
+class TensorBoardCallback(BaseCallback):
+    def __init__(self, writer):
+        super(TensorBoardCallback, self).__init__()
+        self.writer = writer
+        self.episode_rewards = []
+        self.current_episode_reward = 0
+
+    def _on_step(self) -> bool:
+        # Track rewards for the current episode
+        self.current_episode_reward += self.locals["rewards"][0]
+
+        # If the episode ends, log the reward
+        if self.locals["dones"][0]:
+            episode = len(self.episode_rewards)
+            self.episode_rewards.append(self.current_episode_reward)
+            self.writer.add_scalar("Reward/Episode", self.current_episode_reward, episode)
+            self.current_episode_reward = 0
+
+        # Log metrics during training
+        self.writer.add_scalar("Metrics/approxkl", self.locals.get("approx_kl", 0), self.num_timesteps)
+        self.writer.add_scalar("Metrics/clipfrac", self.locals.get("clipfrac", 0), self.num_timesteps)
+        self.writer.add_scalar("Metrics/explained_variance", self.locals.get("explained_variance", 0), self.num_timesteps)
+        self.writer.add_scalar("Metrics/policy_entropy", self.locals.get("entropy", 0), self.num_timesteps)
+        self.writer.add_scalar("Metrics/policy_loss", self.locals.get("pg_loss", 0), self.num_timesteps)
+        self.writer.add_scalar("Metrics/value_loss", self.locals.get("value_loss", 0), self.num_timesteps)
+
+        # Log any additional metrics
+        return True
+
+    def _on_training_end(self):
+        self.writer.close()
+
+
 def optimize_ppo(trial):
     """
     Optimize PPO hyperparameters using Optuna.
@@ -156,7 +189,7 @@ def optimize_ppo(trial):
 
     # Evaluation
     rewards = []
-    for _ in range(10):  # Evaluate over 10 episodes instead of 100 for efficiency
+    for _ in range(10):  #
         obs = env.reset()
         total_reward = 0
         done = False
@@ -200,7 +233,7 @@ final_model.set_logger(new_logger)
 
 # Train with custom callback
 callback = RewardLoggingCallback()
-final_model.learn(total_timesteps=1000, callback=callback)
+final_model.learn(total_timesteps=10000, callback=callback)
 
 # Plot episode rewards
 plt.figure(figsize=(12, 6))

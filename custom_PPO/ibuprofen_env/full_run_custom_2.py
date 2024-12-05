@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import optuna
 import torch.nn.functional as F
+from torch.utils.tensorboard import SummaryWriter
 
 
 class IbuprofenEnv(gym.Env):
@@ -110,6 +111,11 @@ class ValueNetwork(nn.Module):
     def forward(self, state):
         return self.fc(state)
 
+
+from torch.utils.tensorboard import SummaryWriter
+# Initialize TensorBoard writer
+writer = SummaryWriter(log_dir="runs24/ppo_ibuprofen")
+
 class PPOAgent:
     def __init__(self, state_dim, action_dim, lr, gamma, eps_clip, batch_size, ppo_epochs, entropy_beta, buffer_size,
                  max_steps, hidden_units, num_layers, lambda_gae=0.95):
@@ -126,6 +132,7 @@ class PPOAgent:
         self.max_steps = max_steps
         self.lambda_gae = lambda_gae  # For GAE
 
+        self.writer = SummaryWriter(log_dir="runs24/ppo_ibuprofen")
 
     def compute_advantage(self, rewards, values, dones):
         advantages = []
@@ -142,7 +149,7 @@ class PPOAgent:
 
         return np.array(advantages)
 
-    def train(self, trajectories):
+    def train(self, trajectories, episode):
         states, actions, rewards, dones, old_probs = map(np.array, trajectories)
         states = torch.tensor(states, dtype=torch.float32)
         actions = torch.tensor(actions, dtype=torch.int64)
@@ -150,16 +157,18 @@ class PPOAgent:
         dones = torch.tensor(dones, dtype=torch.float32)
         old_probs = torch.tensor(old_probs, dtype=torch.float32)
 
-        # Compute values and advantages
         values = self.value(states).squeeze()
         advantages = self.compute_advantage(rewards.numpy(), values.detach().numpy(), dones.numpy())
         advantages = torch.tensor(advantages, dtype=torch.float32)
 
-        # Compute returns for value function target
         returns = advantages + values.detach()
-
-        # Normalize advantages
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
+        approx_kl_list = []
+        clipfrac_list = []
+        policy_loss_list = []
+        value_loss_list = []
+        entropy_loss_list = []
 
         for _ in range(self.ppo_epochs):
             for i in range(0, len(states), self.batch_size):
@@ -184,13 +193,43 @@ class PPOAgent:
                 policy_loss.backward()
                 self.optimizer_policy.step()
 
-                # **Value Function Update**
+                # Value Function Update
                 value_preds = self.value(state_batch).squeeze()
                 value_loss = F.mse_loss(value_preds, return_batch)
 
                 self.optimizer_value.zero_grad()
                 value_loss.backward()
                 self.optimizer_value.step()
+
+                # Calculate Metrics
+                approx_kl = (old_prob_batch * (torch.log(old_prob_batch) - torch.log(new_probs + 1e-10))).mean()
+                clipped = torch.abs(ratio - 1.0) > self.eps_clip
+                clipfrac = torch.mean(clipped.float())
+
+                approx_kl_list.append(approx_kl.item())
+                clipfrac_list.append(clipfrac.item())
+                policy_loss_list.append(policy_loss.item())
+                value_loss_list.append(value_loss.item())
+                entropy_loss_list.append(entropy_loss.item())
+
+        # Log Metrics to TensorBoard
+        policy_loss_mean = np.mean(policy_loss_list)
+        value_loss_mean = np.mean(value_loss_list)
+        entropy_loss_mean = np.mean(entropy_loss_list)
+        approx_kl_mean = np.mean(approx_kl_list)
+        clipfrac_mean = np.mean(clipfrac_list)
+
+        self.writer.add_scalar("Policy Loss", policy_loss_mean, episode)
+        self.writer.add_scalar("Value Loss", value_loss_mean, episode)
+        self.writer.add_scalar("Entropy Loss", entropy_loss_mean, episode)
+        self.writer.add_scalar("Approx KL", approx_kl_mean, episode)
+        self.writer.add_scalar("Clip Fraction", clipfrac_mean, episode)
+
+        # Explained variance
+        returns_np = returns.detach().numpy()
+        value_preds_np = value_preds.detach().numpy()
+        explained_var = 1 - np.var(returns_np - value_preds_np) / (np.var(returns_np) + 1e-8)
+        self.writer.add_scalar("Explained Variance", explained_var, episode)
 
 
 def objective(trial):
@@ -229,7 +268,7 @@ def objective(trial):
     # Training loop for Optuna
     reward_history = []
 
-    for episode in range(100):  # Number of episodes per trial
+    for episode in range(24000):  # Number of episodes per trial
         states, actions, rewards, dones, old_probs = [], [], [], [], []
         state, _ = env.reset()
         total_reward = 0
@@ -254,7 +293,7 @@ def objective(trial):
                 break
 
         # Train PPO with collected data
-        agent.train((states, actions, rewards, dones, old_probs))
+        agent.train((states, actions, rewards, dones, old_probs), episode)  # Pass `episode` argument
         reward_history.append(total_reward)
 
     # Return mean reward over episodes for Optuna to optimize
@@ -272,7 +311,6 @@ study.optimize(objective, n_trials=100)
 # Print the Best Hyperparameters
 print("Best Hyperparameters:")
 print(study.best_params)
-
 
 
 # Train the Agent with the Best Hyperparameters
@@ -301,43 +339,55 @@ max_horizon = 24     # Full time period (24 hours, in your case)
 horizon_increment = 2  # Increase the horizon incrementally
 time_horizon = initial_horizon
 
+
 reward_history = []
 
-for episode in range(1000):  # Number of training episodes
+try:
+    for episode in range(24000):  # Number of training episodes
 
-    time_horizon = min(max_horizon, initial_horizon + episode * horizon_increment)
+        time_horizon = min(max_horizon, initial_horizon + episode * horizon_increment)
 
-    states, actions, rewards, dones, old_probs = [], [], [], [], []
-    state, _ = env.reset()  # Reset environment at the start of the episode
-    total_reward = 0
+        states, actions, rewards, dones, old_probs = [], [], [], [], []
+        state, _ = env.reset()  # Reset environment at the start of the episode
+        total_reward = 0
 
-    for t in range(time_horizon):  # Use the dynamic time horizon instead of fixed `max_steps`
-        state_tensor = torch.tensor(state, dtype=torch.float32)
-        action_probs = agent.policy(state_tensor).detach().numpy()
-        action = np.random.choice(env.action_space.n, p=action_probs)
+        for t in range(time_horizon):  # Use the dynamic time horizon instead of fixed `max_steps`
+            state_tensor = torch.tensor(state, dtype=torch.float32)
+            action_probs = agent.policy(state_tensor).detach().numpy()
+            action = np.random.choice(env.action_space.n, p=action_probs)
 
-        new_state, reward, done, truncated, _ = env.step(action)
+            new_state, reward, done, truncated, _ = env.step(action)
 
-        # Store transitions
-        states.append(state)
-        actions.append(action)
-        rewards.append(reward)
-        dones.append(done or truncated)
-        old_probs.append(action_probs[action])
+            # Store transitions
+            states.append(state)
+            actions.append(action)
+            rewards.append(reward)
+            dones.append(done or truncated)
+            old_probs.append(action_probs[action])
 
-        state = new_state
-        total_reward += reward
+            state = new_state
+            total_reward += reward
 
-        if done or truncated:
-            break
+            if done or truncated:
+                break
 
-    # Train PPO with collected trajectories
-    agent.train((states, actions, rewards, dones, old_probs))
-    reward_history.append(total_reward)
+        # Train PPO with collected trajectories
+        agent.train((states, actions, rewards, dones, old_probs), episode)
+        reward_history.append(total_reward)
 
-    # Log progress
-    if episode % 50 == 0:
-        print(f"Episode {episode}: Total Reward = {total_reward}, Time Horizon = {time_horizon}")
+        # Log reward to TensorBoard
+        writer.add_scalar("Episode Reward", total_reward, episode)
+
+        # Log time horizon
+        writer.add_scalar("Time Horizon", time_horizon, episode)
+
+        # Log progress
+        if episode % 50 == 0:
+            print(f"Episode {episode}: Total Reward = {total_reward}, Time Horizon = {time_horizon}")
+
+finally:
+    # Ensure the writer is closed properly
+    writer.close()
 
 # Plot rewards
 plt.figure(figsize=(12, 6))
@@ -350,7 +400,7 @@ plt.show()
 
 
 # Evaluation Loop
-evaluation_episodes = 100  # Number of episodes for evaluation
+evaluation_episodes = 24000  # Number of episodes for evaluation
 state, _ = env.reset()
 
 evaluation_rewards = []
