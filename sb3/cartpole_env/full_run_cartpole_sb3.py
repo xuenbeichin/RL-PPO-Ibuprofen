@@ -11,21 +11,47 @@ from datetime import datetime
 
 class RewardLoggingCallback(BaseCallback):
     """
-    Custom callback to log rewards during training.
+    Custom callback for logging episode rewards during training.
+
+    This callback tracks rewards for each episode during training. It accumulates rewards
+    step-by-step and logs the total reward at the end of each episode. The rewards for all
+    completed episodes are stored in a list for analysis or visualization after training.
+
+    Attributes:
+        episode_rewards (list): A list of total rewards for all completed episodes.
+        current_episode_reward (float): The cumulative reward for the current episode.
     """
+
     def __init__(self):
-        super().__init__()
-        self.episode_rewards = []
-        self.current_rewards = []
+        """
+        Initializes the RewardLoggingCallback.
+
+        Sets up the storage for episode rewards and initializes the current episode reward tracker.
+        """
+        super(RewardLoggingCallback, self).__init__()
+        self.episode_rewards = []  # List to store rewards for completed episodes
+        self.current_episode_reward = 0  # Accumulates rewards for the current episode
 
     def _on_step(self) -> bool:
-        reward = self.locals["rewards"]
-        done = self.locals["dones"]
-        self.current_rewards.append(reward)
+        """
+        Called after each environment step during training.
 
-        if done:
-            self.episode_rewards.append(sum(self.current_rewards))
-            self.current_rewards = []
+        Accumulates the reward for the current step into the current episode reward.
+        If the episode ends, logs the total episode reward and resets the tracker.
+
+        Returns:
+            bool: Always returns True, allowing training to continue.
+        """
+        # Accumulate reward for the current step
+        self.current_episode_reward += self.locals["rewards"][0]
+
+        # Check if the episode is done
+        if self.locals["dones"][0]:
+            # Log the total reward for the completed episode
+            self.episode_rewards.append(self.current_episode_reward)
+            # Reset the tracker for the next episode
+            self.current_episode_reward = 0
+
         return True
 
 
@@ -173,7 +199,7 @@ def train_and_render_cartpole():
     eval_env.close()
 
     # Plotting Pole Angles
-    pole_angles = [s[2] for s in state_trajectory]  # Adjust index if necessary
+    pole_angles = [s[2] for s in state_trajectory]
     plt.figure(figsize=(12, 6))
     plt.plot(range(len(pole_angles)), pole_angles, label='Pole Angle', color='b')
     plt.axhline(y=0, color='gray', linestyle='--', linewidth=1, label="Vertical Position")

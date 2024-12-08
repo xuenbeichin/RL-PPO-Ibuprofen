@@ -1,66 +1,119 @@
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
-import matplotlib.pyplot as plt
-
-# Import the custom ibuprofen environment
 from environments.ibuprofen_env import IbuprofenEnv
-# Custom callback for logging rewards during training
 from sb3.callback_sb3 import RewardLoggingCallback
+from sb3.ibuprofen_env_sb3.scripts.optimize_sb3_ibuprofen import get_best_params
 
-
-def train_agent(best_params, episodes=10000):
+def train_ppo_model(env, best_params, total_timesteps, callback=None):
     """
-    Trains a PPO agent using the given hyperparameters and episodes.
+    Train a PPO model using the specified environment and hyperparameters.
 
     Args:
-        best_params (dict): A dictionary of the best hyperparameters obtained from optimization.
-            Expected keys: "learning_rate", "gamma", "n_epochs", "ent_coef",
-            "batch_size", "n_steps", "gae_lambda", "clip_range".
-        episodes (int): Number of episodes to train the agent. Default is 10,000.
+        env (DummyVecEnv): The training environment.
+        best_params (dict): Dictionary containing optimized hyperparameters for PPO.
+        total_timesteps (int): Total timesteps for training the model.
+        callback (BaseCallback, optional): A callback for logging or monitoring training.
 
     Returns:
-        tuple:
-            - model (PPO): The trained PPO model.
-            - callback (RewardLoggingCallback): Callback containing logged rewards.
+        PPO: The trained PPO model.
     """
-    # Setup the training environment
-    env = DummyVecEnv([lambda: IbuprofenEnv(normalize=True)])  # Normalize the environment for stable learning
-
-    # Initialize the PPO model with the best hyperparameters
+    # Initialize the PPO model with the optimized hyperparameters
     model = PPO(
-        "MlpPolicy",  # Use a Multi-Layer Perceptron (MLP) policy
-        env,  # Training environment
-        learning_rate=best_params["learning_rate"],  # Optimized learning rate
-        gamma=best_params["gamma"],  # Optimized discount factor
-        n_epochs=best_params["n_epochs"],  # Optimized number of epochs
-        ent_coef=best_params["ent_coef"],  # Optimized entropy coefficient
-        batch_size=best_params["batch_size"],  # Optimized batch size
-        n_steps=best_params["n_steps"],  # Optimized number of steps per update
-        gae_lambda=best_params["gae_lambda"],  # Optimized GAE lambda
-        clip_range=best_params["clip_range"],  # Optimized clipping range for PPO
-        verbose=1,  # Verbose level for training logs
+        "MlpPolicy",
+        env,
+        learning_rate=best_params["learning_rate"],
+        gamma=best_params["gamma"],
+        n_epochs=best_params["n_epochs"],
+        ent_coef=best_params["ent_coef"],
+        batch_size=best_params["batch_size"],
+        n_steps=best_params["n_steps"],
+        gae_lambda=best_params["gae_lambda"],
+        clip_range=best_params["clip_range"],
+        verbose=1,
     )
 
-    # Initialize a custom callback for logging rewards
-    callback = RewardLoggingCallback()
+    # Train the model
+    model.learn(total_timesteps=total_timesteps, callback=callback)
 
-    # Train the PPO model for the specified number of timesteps
-    model.learn(total_timesteps=episodes * best_params["n_steps"], callback=callback)
-
-    return model, callback
+    return model
 
 
-def plot_learning_curve(rewards):
+def dynamic_training_loop(model, env, initial_horizon, max_horizon, horizon_increment, num_episodes):
     """
-    Plots the learning curve showing rewards per episode during training.
+    Run a training loop with a dynamically adjusted time horizon.
 
     Args:
-        rewards (list or array-like): A list of rewards logged during training.
+        model (PPO): The trained PPO model.
+        env (DummyVecEnv): The environment used for training and evaluation.
+        initial_horizon (int): Initial time horizon for the episodes.
+        max_horizon (int): Maximum time horizon for the episodes.
+        horizon_increment (int): Increment for time horizon after each episode.
+        num_episodes (int): Number of episodes to train.
+
+    Returns:
+        list: A history of total rewards for each episode.
     """
-    plt.figure(figsize=(12, 6))
-    plt.plot(rewards)
-    plt.xlabel("Episodes")
-    plt.ylabel("Rewards")
-    plt.title("Learning Curve for Ibuprofen Env (SB3)")
-    plt.grid()
-    plt.show()
+    reward_history = []
+
+    # Initialize the dynamic time horizon
+    time_horizon = initial_horizon
+
+    # Training loop over the specified number of episodes
+    for episode in range(num_episodes):
+        # Update the time horizon dynamically
+        time_horizon = min(max_horizon, initial_horizon + episode * horizon_increment)
+
+        # Reset the environment at the beginning of the episode
+        state = env.reset()
+
+        total_reward = 0
+        plasma_concentration_history = []
+
+        # Run the episode for the current time horizon
+        for t in range(time_horizon):
+            # Predict the action using the PPO model
+            action, _ = model.predict(state, deterministic=False)
+
+            # Take a step in the environment
+            new_state, reward, done, infos = env.step(action)
+            plasma_concentration_history.append(new_state[0])  # Store plasma concentration
+
+            # Accumulate the reward
+            total_reward += reward
+
+            # Update the current state
+            state = new_state
+
+            # Check if the episode is done
+            if done:
+                break
+
+        # Append the total reward for the episode to the history
+        reward_history.append(total_reward)
+
+        # Log progress every 10 episodes
+        if episode % 10 == 0:
+            print(f"Episode {episode}: Total Reward = {total_reward}, Time Horizon = {time_horizon}")
+
+    return reward_history
+
+
+if __name__ == "__main__":
+
+    env = DummyVecEnv([lambda: IbuprofenEnv(normalize=True)])
+    callback = RewardLoggingCallback()
+
+    best_params = get_best_params(1)
+
+    # Train the PPO model
+    final_model = train_ppo_model(env, best_params, total_timesteps=24000, callback=callback)
+
+    # Run the dynamic training loop
+    reward_history = dynamic_training_loop(
+        model=final_model,
+        env=env,
+        initial_horizon=6,
+        max_horizon=24,
+        horizon_increment=2,
+        num_episodes=1000
+    )
