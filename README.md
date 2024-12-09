@@ -6,6 +6,8 @@ Additionally, the use of CartPole-v1 (an OpenAi's Gym environment) is used for t
 
 A PPO algorithm is constructed in the directory ```custom_PPO```, and the directory ```stable_baselines3``` uses stable_baselines3 for the PPO. Moreover, two environments are included (one is a customized drug delivery environment for ibuprofen and CartPole-v1).
 
+**Note**: Each directory has a full .py script and jupyter notebook with a full run of the implementation for demonstration.
+
 ## Installation
 
 ### 1. Clone the repository
@@ -197,9 +199,6 @@ state_trajectory = evaluate_agent(final_model, eval_env, episodes)
 plot_pole_angles(state_trajectory)
 ```
 
-
-### Notes
-There are jupyter notebooks with a full run for each subfolders.
 
 
 
