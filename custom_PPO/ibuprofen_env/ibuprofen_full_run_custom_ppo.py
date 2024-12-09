@@ -232,7 +232,6 @@ def objective(trial):
         buffer_size=buffer_size,
         hidden_units=hidden_units,
         num_layers=num_layers,
-        writer=writer  # Pass the writer here
     )
 
     # Training loop for Optuna

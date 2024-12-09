@@ -243,6 +243,7 @@ callback = RewardLoggingCallback()
 final_model.learn(total_timesteps=24000, callback=callback)
 
 # Training Loop with Dynamic Time Horizon
+
 # Initialize variables for dynamic time horizon
 initial_horizon = 6  # Start with a small time horizon (e.g., 6 hours)
 max_horizon = 24     # Full time period (24 hours, in your case)

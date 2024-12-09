@@ -1,92 +1,78 @@
-import gymnasium as gym
 from gymnasium.wrappers import RecordVideo
-import matplotlib.pyplot as plt
+from datetime import datetime
 
-
-def create_eval_env(video_folder, video_name_prefix):
+def record_evaluation_video(model, env_id, video_folder, deterministic=True):
     """
-    Create an evaluation environment with video recording.
-
-    This function initializes the CartPole-v1 environment and wraps it with
-    a video recording wrapper that saves videos of all evaluation episodes.
+    Evaluates a trained RL model and saves the evaluation episode as a video.
 
     Args:
-        video_folder (str): Folder where video recordings will be saved.
-        video_name_prefix (str): Prefix for video file names.
+        model (BaseAlgorithm): The trained RL model to evaluate.
+        env_id (str): Gym environment ID (e.g., "CartPole-v1").
+        video_folder (str): Folder where videos will be saved.
+        deterministic (bool): Whether to use deterministic actions during evaluation.
 
     Returns:
-        eval_env: The CartPole-v1 environment wrapped with a video recorder.
+        None
     """
-    # Create the CartPole environment with RGB rendering for video recording
-    eval_env = gym.make("CartPole-v1", render_mode="rgb_array")
+    eval_env = gym.make(env_id, render_mode="rgb_array")
 
-    # Wrap the environment to record videos of all episodes
+    video_name_prefix = f"eval_run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+    # Wrap the environment with RecordVideo to save videos
     eval_env = RecordVideo(
         eval_env,
         video_folder=video_folder,
         episode_trigger=lambda e: True,  # Record all episodes
-        name_prefix=video_name_prefix
+        name_prefix=video_name_prefix  # Custom name prefix for the videos
     )
-    return eval_env
+
+    # Reset the environment
+    state, _ = eval_env.reset()
+    done = False
+
+    # Evaluation loop
+    while not done:
+        # Predict the action using the trained model
+        action, _ = model.predict(state, deterministic=deterministic)
+        # Step in the environment
+        state, reward, done, truncated, _ = eval_env.step(action)
+        done = done or truncated  # Treat truncation as episode end
+
+    # Close the environment
+    eval_env.close()
+
+    print(f"Video saved in: {video_folder}")
 
 
-def evaluate_agent(final_model, eval_env, episodes=50):
+import gym
+
+def evaluate_model(model, env_id, deterministic=True):
     """
-    Evaluate a trained PPO agent on the CartPole-v1 environment.
-
-    This function runs the agent in the environment for a specified number of
-    episodes and collects the state trajectory for analysis.
+    Evaluates a trained RL model and returns the state trajectory.
 
     Args:
-        final_model: The trained PPO model to evaluate.
-        eval_env: The evaluation environment.
-        episodes (int): Number of episodes to run the evaluation. Default is 50.
+        model (BaseAlgorithm): The trained RL model to evaluate.
+        env_id (str): Gym environment ID (e.g., "CartPole-v1").
+        deterministic (bool): Whether to use deterministic actions during evaluation.
 
     Returns:
-        list: The state trajectory observed during the evaluation episodes.
+        list: The trajectory of states observed during the evaluation episode.
     """
-    state_trajectory = []  # To store the trajectory of states across episodes
+    # Create the environment
+    eval_env = gym.make(env_id)
 
-    # Loop through the specified number of episodes
-    for _ in range(episodes):
-        state, _ = eval_env.reset()  # Reset the environment at the start of each episode
-        done = False
+    # Reset the environment and initialize variables for evaluation
+    state, _ = eval_env.reset()
+    done = False
+    state_trajectory = []
 
-        # Episode loop: interact with the environment until the episode ends
-        while not done:
-            state_trajectory.append(state)  # Record the current state
-            action, _ = final_model.predict(state, deterministic=True)  # Get agent's action
-            # Step the environment with the selected action
-            state, reward, done, truncated, _ = eval_env.step(action)
-            done = done or truncated  # Handle truncated episodes as done
+    # Evaluation loop
+    while not done:
+        state_trajectory.append(state)  # Record the state trajectory
+        action, _ = model.predict(state, deterministic=deterministic)  # Predict action
+        state, reward, done, truncated, _ = eval_env.step(action)  # Take a step in the environment
+        done = done or truncated  # Handle truncation as episode end
 
-    eval_env.close()  # Close the environment after evaluation
+    eval_env.close()  # Close the environment
+
     return state_trajectory
-
-
-def plot_pole_angles(state_trajectory):
-    """
-    Plot the pole angle over time using the state trajectory from evaluation.
-
-    This function visualizes how the pole angle changes over time during the
-    evaluation of the trained agent.
-
-    Args:
-        state_trajectory (list): A list of states observed during evaluation, where
-                                 each state includes the pole angle as the third value.
-    """
-    # Extract pole angles (third element in each state)
-    pole_angles = [s[2] for s in state_trajectory]
-
-    plt.figure(figsize=(12, 6))
-    plt.plot(range(len(pole_angles)), pole_angles, label='Pole Angle', color='b')
-
-    # Add a horizontal reference line for the vertical position
-    plt.axhline(y=0, color='gray', linestyle='--', linewidth=1, label="Vertical Position")
-
-    plt.xlabel('Time Step')
-    plt.ylabel('Pole Angle (radians)')
-    plt.title('Pole Angle Over Time During Evaluation (SB3)')
-    plt.legend()
-    plt.grid()
-    plt.show()

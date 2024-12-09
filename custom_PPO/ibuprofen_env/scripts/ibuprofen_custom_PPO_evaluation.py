@@ -3,77 +3,82 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 
-import torch
-import numpy as np
-
-def evaluate_agent(agent, env):
+def evaluate_agent(env, agent, evaluation_episodes=100):
     """
-    Evaluate a trained agent in the given environment and track the plasma concentration.
-
-    This function interacts with the environment using the agent's policy to determine actions
-    and records the plasma concentration at each time step.
+    Evaluates a trained agent on the environment and collects rewards and state trajectories.
 
     Args:
-        agent: The trained agent to be evaluated. The agent should have a `policy` attribute
-               that provides action probabilities given a state.
-        env: The environment in which the agent will be evaluated. The environment must have
-             `reset()` and `step()` methods, and a `max_steps` attribute.
+        env (gym.Env): The environment to evaluate the agent on.
+        agent (PPOAgent): The trained PPO agent with policy and value networks.
+        evaluation_episodes (int): Number of episodes to run for evaluation.
 
     Returns:
-        list: A history of plasma concentrations recorded during the evaluation.
+        tuple: A tuple containing:
+            - evaluation_rewards (list): Total rewards for each evaluation episode.
+            - plasma_concentration_trajectories (list): Plasma concentration trajectories for each episode.
     """
-    # Reset the environment and get the initial state
-    state, _ = env.reset()  # Reset the environment and get the initial state
-    plasma_concentration_history = [state[0]]  # Initialize the history with the initial plasma concentration
+    evaluation_rewards = []  # List to store total rewards for each episode
+    plasma_concentration_trajectories = []  # List to store plasma concentration trajectories
 
-    # Run the evaluation loop for a maximum number of steps
-    for t in range(env.max_steps):  # Use the maximum steps defined by the environment
-        # Convert the state into a tensor for the agent's policy network
-        state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)  # Add batch dimension (1, state_dim)
+    for episode in range(evaluation_episodes):
+        state, _ = env.reset()  # Reset the environment at the start of each episode
+        total_reward = 0
+        plasma_concentration_history = [state[0]]  # Track initial plasma concentration
 
-        # Predict action probabilities using the agent's policy
-        action_probs = agent.policy(state_tensor).detach().numpy().flatten()
-        # Select the action with the highest probability
-        action = np.argmax(action_probs)
+        # Episode loop
+        for _ in range(env.max_steps):  # Use max_steps from the environment
+            # Convert state to tensor for the policy network
+            state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+            action_probs = agent.policy(state_tensor).detach().numpy().flatten()  # Get action probabilities
+            action = np.argmax(action_probs)  # Greedy action selection for evaluation
 
-        # Step the environment with the selected action
-        new_state, _, done, _, _ = env.step(action)
+            # Step in the environment
+            new_state, reward, done, truncated, _ = env.step(action)
+            plasma_concentration_history.append(new_state[0])  # Track plasma concentration
 
-        # Record the plasma concentration from the new state
-        plasma_concentration_history.append(new_state[0])
-        state = new_state  # Update the state for the next step
+            state = new_state
+            total_reward += reward
 
-        # End the evaluation if the environment signals `done`
-        if done:
-            break
+            if done or truncated:
+                break
 
-    return plasma_concentration_history
+        # Store results for this episode
+        evaluation_rewards.append(total_reward)
+        plasma_concentration_trajectories.append(plasma_concentration_history)
 
+    return evaluation_rewards, plasma_concentration_trajectories
 
-
-def plot_plasma_concentration(state_trajectory):
+def plot_plasma_concentration_trajectories(env, plasma_concentration_trajectories):
     """
-    Plot the plasma concentration over time with therapeutic and toxic thresholds.
+    Plots the plasma concentration trajectory of the last episode.
+
+    This function visualizes the plasma concentration levels over time for the last episode
+    in the provided trajectories. It includes annotations for therapeutic ranges and toxic levels
+    based on the environment's parameters.
 
     Args:
-        state_trajectory (list): The trajectory of plasma concentrations recorded during evaluation.
+        env (gym.Env): The environment used, containing attributes for therapeutic ranges.
+        plasma_concentration_trajectories (list of lists): A list where each sublist contains
+            plasma concentration values for an episode. The last sublist corresponds to the
+            most recent episode's trajectory.
+
+    Returns:
+        None: The function displays the plot but does not return any values.
+
+    Visualization Details:
+        - The plasma concentration trajectory for the last episode is plotted as a line.
+        - Dashed green lines indicate the lower and upper bounds of the therapeutic range.
+        - A dashed red line marks the toxic concentration threshold.
+        - The x-axis represents time (e.g., in hours), and the y-axis represents plasma concentration.
     """
     plt.figure(figsize=(12, 6))
-    plt.plot(
-        range(len(state_trajectory)),
-        state_trajectory,
-        label="Plasma Concentration",
-        color="b"
-    )
-
-    # Add therapeutic and toxic thresholds
-    plt.axhline(y=10, color="g", linestyle="--", label="Therapeutic Lower Bound (10 mg/L)")
-    plt.axhline(y=50, color="g", linestyle="--", label="Therapeutic Upper Bound (50 mg/L)")
-    plt.axhline(y=100, color="r", linestyle="--", label="Toxic Threshold (>100 mg/L)")
-
-    plt.xlabel("Time Step")
+    plt.plot(plasma_concentration_trajectories[-1], label="Plasma Concentration")
+    plt.axhline(y=env.therapeutic_range[0], color="g", linestyle="--", label="Lower Therapeutic Range")
+    plt.axhline(y=env.therapeutic_range[1], color="g", linestyle="--", label="Upper Therapeutic Range")
+    plt.axhline(y=100, color="r", linestyle="--", label="Toxic Level")
+    plt.xlabel("Time (hours)")
     plt.ylabel("Plasma Concentration (mg/L)")
-    plt.title("Plasma Drug Concentration Over Time (SB3)")
+    plt.title("Plasma Concentration Over Time (Custom PPO)")
     plt.legend()
     plt.grid()
     plt.show()

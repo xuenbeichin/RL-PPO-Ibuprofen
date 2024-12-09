@@ -1,12 +1,10 @@
 import gymnasium as gym
 import numpy as np
 import optuna
-import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import configure
 from stable_baselines3.common.vec_env import DummyVecEnv
-import matplotlib.pyplot as plt
 
 class IbuprofenEnv(gym.Env):
     """
@@ -156,72 +154,138 @@ class IbuprofenEnv(gym.Env):
         return state
 
 
-class RewardLoggingCallback(BaseCallback):
+class RewardLoggingCallbackTensor(BaseCallback):
     """
     Custom callback for logging rewards and additional PPO-specific metrics to TensorBoard.
+
+    This callback tracks episode rewards during training and logs them to TensorBoard. It also
+    records key PPO-specific metrics, such as policy loss and explained variance, at the end
+    of each rollout.
+
+    Attributes:
+        episode_rewards (list): List of total rewards for completed episodes.
+        current_episode_reward (float): Accumulated reward for the current episode.
+        episode_count (int): Counter for the number of completed episodes.
     """
+
     def __init__(self):
-        super(RewardLoggingCallback, self).__init__()
-        self.episode_rewards = []
-        self.current_episode_reward = 0
-        self.episode_count = 0
+        """
+        Initializes the RewardLoggingCallback.
+
+        Sets up the episode reward tracker and initializes counters for reward tracking.
+        """
+        super(RewardLoggingCallbackTensor, self).__init__()
+        self.episode_rewards = []  # Store rewards for each episode
+        self.current_episode_reward = 0  # Accumulate rewards for the current episode
+        self.episode_count = 0  # Count the number of completed episodes
 
     def _on_step(self) -> bool:
-        # Accumulate rewards for the current episode
+        """
+        Called after each environment step during training.
+
+        Accumulates the reward for the current episode and logs it when the episode ends.
+
+        Returns:
+            bool: Always returns True, allowing the training process to continue.
+        """
+        # Add the reward from the current step to the episode total
         self.current_episode_reward += self.locals["rewards"][0]
 
-        # Log rewards when the episode ends
+        # Check if the episode has ended
         if self.locals["dones"][0]:
+            # Log the total reward for the episode to TensorBoard
             self.logger.record("episode/reward", self.current_episode_reward)
+            # Append the episode reward to the list
             self.episode_rewards.append(self.current_episode_reward)
+            # Increment the episode count
             self.episode_count += 1
-            self.current_episode_reward = 0  # Reset for the next episode
+            # Reset the reward accumulator for the next episode
+            self.current_episode_reward = 0
 
         return True
 
     def _on_rollout_end(self) -> None:
         """
-        Log additional PPO-specific metrics at the end of a rollout.
-        These metrics are computed during the update step in PPO.
+        Called at the end of a rollout.
+
+        Logs additional PPO-specific metrics such as policy loss, value loss, entropy,
+        and explained variance to TensorBoard.
         """
         try:
+            # Define the PPO-specific metrics to log
             metrics = {
-                "train/approxkl": self.locals.get("approx_kl", None),
-                "train/clipfrac": self.locals.get("clip_fraction", None),
-                "train/entropy_loss": self.locals.get("entropy_loss", None),
-                "train/explained_variance": self.locals.get("explained_variance", None),
-                "train/fps": self.locals.get("fps", None),
-                "train/policy_loss": self.locals.get("policy_loss", None),
-                "train/value_loss": self.locals.get("value_loss", None),
+                "train/approxkl": self.locals.get("approx_kl", None),  # Approximate KL divergence
+                "train/clipfrac": self.locals.get("clip_fraction", None),  # Clip fraction
+                "train/entropy_loss": self.locals.get("entropy_loss", None),  # Entropy loss
+                "train/explained_variance": self.locals.get("explained_variance", None),  # Explained variance
+                "train/fps": self.locals.get("fps", None),  # Frames per second
+                "train/policy_loss": self.locals.get("policy_loss", None),  # Policy loss
+                "train/value_loss": self.locals.get("value_loss", None),  # Value loss
                 "train/loss": self.locals.get("loss", None),  # Total loss
             }
-            # Record metrics in TensorBoard
+
+            # Log each metric to TensorBoard if available
             for key, value in metrics.items():
                 if value is not None:
                     self.logger.record(key, value)
         except KeyError:
-            # Skip if the metrics are not available
+            # If some metrics are unavailable, skip logging
             pass
 
 class TensorBoardCallback(BaseCallback):
+    """
+    Custom callback for logging training metrics to TensorBoard.
+
+    This callback tracks rewards and key PPO-specific metrics during training and logs them
+    to TensorBoard. It supports dynamic reward tracking and logs metrics such as:
+        - Approximate KL divergence
+        - Clip fraction
+        - Policy entropy
+        - Policy loss
+        - Value loss
+        - Explained variance
+
+    Attributes:
+        writer (torch.utils.tensorboard.SummaryWriter): TensorBoard writer instance for logging.
+        episode_rewards (list): List of total rewards for completed episodes.
+        current_episode_reward (float): Accumulated reward for the current episode.
+    """
+
     def __init__(self, writer):
+        """
+        Initializes the TensorBoardCallback.
+
+        Args:
+            writer (torch.utils.tensorboard.SummaryWriter): TensorBoard writer for logging.
+        """
         super(TensorBoardCallback, self).__init__()
-        self.writer = writer
-        self.episode_rewards = []
-        self.current_episode_reward = 0
+        self.writer = writer  # TensorBoard writer instance
+        self.episode_rewards = []  # List to store episode rewards
+        self.current_episode_reward = 0  # Accumulate rewards for the current episode
 
     def _on_step(self) -> bool:
-        # Track rewards for the current episode
+        """
+        Called after each environment step during training.
+
+        Tracks the reward for the current episode and logs it to TensorBoard when the episode ends.
+        Logs additional training metrics after every step.
+
+        Returns:
+            bool: Always returns True, allowing the training process to continue.
+        """
+        # Accumulate the reward for the current step
         self.current_episode_reward += self.locals["rewards"][0]
 
-        # If the episode ends, log the reward
+        # Check if the episode has ended
         if self.locals["dones"][0]:
+            # Log the total reward for the episode
             episode = len(self.episode_rewards)
             self.episode_rewards.append(self.current_episode_reward)
             self.writer.add_scalar("Reward/Episode", self.current_episode_reward, episode)
+            # Reset the reward accumulator for the next episode
             self.current_episode_reward = 0
 
-        # Log metrics during training
+        # Log additional PPO-specific metrics to TensorBoard
         self.writer.add_scalar("Metrics/approxkl", self.locals.get("approx_kl", 0), self.num_timesteps)
         self.writer.add_scalar("Metrics/clipfrac", self.locals.get("clipfrac", 0), self.num_timesteps)
         self.writer.add_scalar("Metrics/explained_variance", self.locals.get("explained_variance", 0), self.num_timesteps)
@@ -229,11 +293,16 @@ class TensorBoardCallback(BaseCallback):
         self.writer.add_scalar("Metrics/policy_loss", self.locals.get("pg_loss", 0), self.num_timesteps)
         self.writer.add_scalar("Metrics/value_loss", self.locals.get("value_loss", 0), self.num_timesteps)
 
-        # Log any additional metrics
         return True
 
     def _on_training_end(self):
+        """
+        Called at the end of training.
+
+        Ensures all metrics are properly written and closes the TensorBoard writer.
+        """
         self.writer.close()
+
 
 
 def optimize_ppo(trial):
@@ -316,65 +385,5 @@ final_model = PPO(
 final_model.set_logger(new_logger)
 
 # Train with custom callback
-callback = RewardLoggingCallback()
+callback = RewardLoggingCallbackTensor()
 final_model.learn(total_timesteps=10000, callback=callback)
-
-# Plot episode rewards
-plt.figure(figsize=(12, 6))
-plt.plot(callback.episode_rewards, label="Episode Rewards")
-plt.xlabel("Episode")
-plt.ylabel("Reward")
-plt.title("Learning Curve (SB3)")
-plt.legend()
-plt.grid()
-plt.show()
-
-
-
-# Evaluation Loop
-evaluation_episodes = 100  # Number of episodes for evaluation
-
-evaluation_rewards = []
-plasma_concentration_trajectories = []
-
-# Access the underlying environment from DummyVecEnv
-underlying_env = env.envs[0]  # envs[0] gives access to the unwrapped IbuprofenEnv
-
-for episode in range(evaluation_episodes):
-    state, _ = underlying_env.reset()
-
-    total_reward = 0
-    plasma_concentration_history = [state[0]]  # Track plasma concentration
-
-    for _ in range(underlying_env.max_steps):  # Use max_steps from the underlying environment
-        # Use the SB3 predict method for actions
-        action, _ = final_model.predict(state, deterministic=True)
-
-        # Take the chosen action in the environment
-        new_state, reward, done, truncated, _ = underlying_env.step(action)
-        plasma_concentration_history.append(new_state[0])
-
-        state = new_state
-        total_reward += reward
-
-        if done or truncated:
-            break
-
-    evaluation_rewards.append(total_reward)
-    plasma_concentration_trajectories.append(plasma_concentration_history)
-
-# Access the underlying environment from DummyVecEnv
-underlying_env = env.envs[0]
-
-# Plot plasma concentration from the last evaluation episode
-plt.figure(figsize=(12, 6))
-plt.plot(plasma_concentration_trajectories[-1], label="Plasma Concentration")
-plt.axhline(y=underlying_env.therapeutic_range[0], color="g", linestyle="--", label="Lower Therapeutic Range")
-plt.axhline(y=underlying_env.therapeutic_range[1], color="g", linestyle="--", label="Upper Therapeutic Range")
-plt.axhline(y=100, color="r", linestyle="--", label="Toxic Level")
-plt.xlabel("Time (hours)")
-plt.ylabel("Plasma Concentration (mg/L)")
-plt.title("Plasma Concentration Over Time (SB3)")
-plt.legend()
-plt.grid(True)
-plt.show()

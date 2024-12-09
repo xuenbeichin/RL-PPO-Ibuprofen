@@ -176,18 +176,6 @@ def train_and_render_cartpole():
     # Evaluation loop
     state, _ = eval_env.reset()
     done = False
-
-    while not done:
-        # Predict action
-        action, _ = final_model.predict(state, deterministic=True)
-        state, reward, done, truncated, _ = eval_env.step(action)
-        done = done or truncated
-
-    eval_env.close()
-
-    # Evaluation loop
-    state, _ = eval_env.reset()
-    done = False
     state_trajectory = []
 
     while not done:

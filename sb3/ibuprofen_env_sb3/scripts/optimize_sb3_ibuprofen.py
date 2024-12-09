@@ -1,5 +1,9 @@
 import numpy as np
 import optuna
+from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import DummyVecEnv
+
+from environments.ibuprofen_env import IbuprofenEnv
 
 
 def optimize_ppo(trial):
@@ -20,7 +24,7 @@ def optimize_ppo(trial):
     # Create a vectorized environment with normalization enabled
     env = DummyVecEnv([lambda: IbuprofenEnv(normalize=True)])
 
-    # Suggest hyperparameters for PPO from the trial object
+    # Suggest hyperparameters for PPO to try for optimization
     lr = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)  # Learning rate
     gamma = trial.suggest_float("gamma", 0.90, 0.99)  # Discount factor
     n_epochs = trial.suggest_int("n_epochs", 3, 10)  # Number of training epochs per update
@@ -67,25 +71,26 @@ def optimize_ppo(trial):
 
 def get_best_params(n_trials):
     """
-    Runs an Optuna study to find the best hyperparameters for PPO.
+    Conducts hyperparameter optimization for the PPO algorithm using Optuna and returns the best parameters.
 
-    This function initializes an Optuna study to maximize the mean reward by optimizing
-    the PPO hyperparameters. The study runs for a specified number of trials and returns
-    the best set of hyperparameters found.
+    This function creates an Optuna study to maximize the mean reward by optimizing PPO hyperparameters.
+    It runs the specified number of trials to search for the best combination of hyperparameters.
 
     Args:
-        n_trials (int): The number of trials to run in the Optuna study.
+        n_trials (int): The number of trials to run in the hyperparameter optimization process.
 
     Returns:
-        dict: A dictionary containing the best hyperparameters identified by the study.
+        dict: A dictionary containing the best hyperparameters identified by Optuna.
+              The dictionary keys correspond to the names of the hyperparameters, and
+              the values represent their optimal settings.
     """
-    # Create an Optuna study with the objective to maximize the mean reward
+    # Create an Optuna study to maximize the mean reward
     study = optuna.create_study(direction="maximize")
 
-    # Optimize the PPO hyperparameters using the specified number of trials
+    # Run the optimization for the specified number of trials
     study.optimize(optimize_ppo, n_trials=n_trials)
 
-    # Retrieve the best hyperparameters from the completed study
+    # Extract and return the best parameters
     best_params = study.best_params
-
     return best_params
+

@@ -81,10 +81,8 @@ def plot_pole_angles(state_trajectory):
     # Plot the pole angles
     plt.plot(range(len(pole_angles)), pole_angles, label='Pole Angle', color='b')
 
-    # Add a horizontal line at zero for the vertical position reference
     plt.axhline(y=0, color='gray', linestyle='--', linewidth=1, label="Vertical Position")
 
-    # Add labels and title
     plt.xlabel('Time Step')
     plt.ylabel('Pole Angle (radians)')
     plt.title('Pole Angle Over Time During Evaluation (Custom PPO)')

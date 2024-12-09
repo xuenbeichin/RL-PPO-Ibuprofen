@@ -1,4 +1,5 @@
 import gymnasium as gym
+import optuna
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
 import numpy as np
@@ -64,3 +65,28 @@ def optimize_ppo(trial):
 
     # Return the mean reward as the objective value
     return np.mean(total_rewards)
+
+def get_best_params(n_trials):
+    """
+    Conducts hyperparameter optimization for the PPO algorithm using Optuna and returns the best parameters.
+
+    This function creates an Optuna study to maximize the mean reward by optimizing PPO hyperparameters.
+    It runs the specified number of trials to search for the best combination of hyperparameters.
+
+    Args:
+        n_trials (int): The number of trials to run in the hyperparameter optimization process.
+
+    Returns:
+        dict: A dictionary containing the best hyperparameters identified by Optuna.
+              The dictionary keys correspond to the names of the hyperparameters, and
+              the values represent their optimal settings.
+    """
+    # Create an Optuna study to maximize the mean reward
+    study = optuna.create_study(direction="maximize")
+
+    # Run the optimization for the specified number of trials
+    study.optimize(optimize_ppo, n_trials=n_trials)
+
+    # Extract and return the best parameters
+    best_params = study.best_params
+    return best_params

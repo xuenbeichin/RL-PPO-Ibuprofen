@@ -47,7 +47,7 @@ class PPOAgent:
         self.entropy_beta = entropy_beta
         self.buffer_size = buffer_size
         self.max_steps = max_steps
-        self.lambda_gae = lambda_gae  # For GAE
+        self.lambda_gae = lambda_gae
 
     def compute_advantage(self, rewards, values, dones):
         """
@@ -127,6 +127,7 @@ class PPOAgent:
 def optimize_ppo(trial):
     # Create the CartPole-v1 environment
     env = gym.make("CartPole-v1", render_mode="rgb_array")  # Set render_mode to rgb_array
+
     # Define the hyperparameters search space
     lr = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
     gamma = trial.suggest_float("gamma", 0.90, 0.99)
@@ -305,7 +306,7 @@ while not done:
 eval_env.close()
 
 # Extract Pole Angles from State Trajectory
-pole_angles = [s[2] for s in state_trajectory]  # Assuming state[2] is the pole angle
+pole_angles = [s[2] for s in state_trajectory]
 
 # Plot Pole Angle Over Time During Evaluation
 plt.figure(figsize=(12, 6))

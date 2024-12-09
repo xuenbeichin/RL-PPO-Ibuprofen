@@ -38,7 +38,7 @@ def optimize_ppo(trial):
     max_steps = trial.suggest_int("max_steps", 500_000, 1_000_000, step=100_000)  # Max training steps
     normalize = trial.suggest_categorical("normalize", [True, False])  # Whether to normalize observations
 
-    # Apply normalization to observation if specified
+    # Apply normalization to observation if wanted
     if normalize:
         env = gym.wrappers.TransformObservation(
             env,
@@ -104,3 +104,28 @@ def optimize_ppo(trial):
         reward_history.append(total_reward)
 
     return np.mean(reward_history)
+
+def get_best_params(n_trials):
+    """
+    Conducts hyperparameter optimization for the PPO algorithm using Optuna and returns the best parameters.
+
+    This function creates an Optuna study to maximize the mean reward by optimizing PPO hyperparameters.
+    It runs the specified number of trials to search for the best combination of hyperparameters.
+
+    Args:
+        n_trials (int): The number of trials to run in the hyperparameter optimization process.
+
+    Returns:
+        dict: A dictionary containing the best hyperparameters identified by Optuna.
+              The dictionary keys correspond to the names of the hyperparameters, and
+              the values represent their optimal settings.
+    """
+    # Create an Optuna study to maximize the mean reward
+    study = optuna.create_study(direction="maximize")
+
+    # Run the optimization for the specified number of trials
+    study.optimize(optimize_ppo, n_trials=n_trials)
+
+    # Extract and return the best parameters
+    best_params = study.best_params
+    return best_params

@@ -22,26 +22,16 @@ def plot_reward_history(reward_history, title="Learning Curve (SB3)"):
     plt.show()
 
 def plot_last_episode_concentration(env, model, therapeutic_range=(10, 50), toxic_threshold=100):
-    """
-    Plots the plasma concentration over time for the last episode.
-
-    Args:
-        env (DummyVecEnv): The environment used for evaluation.
-        model (PPO): The trained PPO model.
-        therapeutic_range (tuple): The therapeutic range (min, max) for the drug concentration.
-        toxic_threshold (float): The toxic threshold for the drug concentration.
-    """
-    obs = env.reset()  # Reset the environment
-    plasma_concentrations = []  # List to store plasma concentrations over time
+    obs = env.reset()
+    plasma_concentrations = []
     done = False
-
     while not done:
-        # Predict action using the trained model
+        # Get action from the model
         action, _ = model.predict(obs, deterministic=True)
-        # Take a step in the environment
+        # Unpack the four values returned by step
         obs, _, done, info = env.step(action)
-        # Collect the current plasma concentration
-        plasma_concentrations.append(env.envs[0].plasma_concentration)
+        # Access the plasma concentration from the environment
+        plasma_concentrations.append(env.envs[0].plasma_concentration)  # Collect plasma concentration
 
     # Plot the plasma concentration
     plt.figure(figsize=(12, 6))
@@ -51,15 +41,9 @@ def plot_last_episode_concentration(env, model, therapeutic_range=(10, 50), toxi
     plt.axhline(y=toxic_threshold, color='red', linestyle='--', label="Toxic Threshold")
     plt.xlabel("Time Step")
     plt.ylabel("Plasma Concentration")
-    plt.title("Plasma Concentration Over Time (Last Episode)")
+    plt.title("Plasma Concentration Over Time")
     plt.legend()
     plt.grid(True)
     plt.show()
 
-if __name__ == "__main__":
-    # Plot the reward history
-    plot_reward_history(reward_history)
 
-    # Evaluate and plot the plasma concentration for the last episode
-    env = DummyVecEnv([lambda: IbuprofenEnv(normalize=False)])  # Use the original, non-normalized environment
-    plot_last_episode_concentration(env, final_model)
