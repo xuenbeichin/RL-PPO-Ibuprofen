@@ -12,7 +12,7 @@ class IbuprofenEnv(gym.Env):
     a therapeutic range while avoiding toxicity.
 
     Attributes:
-        action_space (gym.spaces.Discrete): The discrete action space representing dose levels (0 to 4).
+        action_spxqace (gym.spaces.Discrete): The discrete action space representing dose levels (0 to 4).
         observation_space (gym.spaces.Box): The observation space representing the plasma concentration (0 to 100).
         therapeutic_range (tuple): A tuple defining the lower and upper bounds of the therapeutic range (10 to 50).
         half_life (float): The drug's half-life in hours.

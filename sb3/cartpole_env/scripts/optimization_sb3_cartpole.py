@@ -4,7 +4,9 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
 import numpy as np
 
-def optimize_ppo(trial):
+# env = gym.make("CartPole-v1", render_mode="rgb_array")
+
+def optimize_ppo(env, trial):
     """
     Optimize PPO hyperparameters using Optuna for the CartPole-v1 environment.
 
@@ -19,8 +21,6 @@ def optimize_ppo(trial):
         float: The mean reward over 50 evaluation episodes, used as the objective value.
     """
 
-    # Create the CartPole environment with RGB rendering for evaluation
-    env = gym.make("CartPole-v1", render_mode="rgb_array")
     env = DummyVecEnv([lambda: env])  # Wrap environment for compatibility with Stable-Baselines3
 
     # Suggest hyperparameters using Optuna
@@ -51,7 +51,7 @@ def optimize_ppo(trial):
 
     # Evaluate the trained model
     total_rewards = []  # To store total rewards for each evaluation episode
-    for _ in range(50):  # Evaluate over 50 episodes, can change if you want
+    for _ in range(100):  # Evaluate over 50 episodes, can change if you want
         state = env.reset()  # Reset the environment
         total_reward = 0  # Initialize total reward for the episode
         done = False  # Flag to track episode completion
