@@ -312,7 +312,7 @@ pole_angles = [s[2] for s in state_trajectory]
 plt.figure(figsize=(12, 6))
 plt.plot(range(len(pole_angles)), pole_angles, label='Pole Angle', color='b')
 plt.axhline(y=0, color='gray', linestyle='--', linewidth=1, label="Vertical Position")
-plt.xlabel('Time Step')
+plt.xlabel('Time Step (ms)')
 plt.ylabel('Pole Angle (radians)')
 plt.title('Pole Angle Over Time During Evaluation (Custom PPO)')
 plt.legend()
